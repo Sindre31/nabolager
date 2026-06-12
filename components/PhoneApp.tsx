@@ -4,13 +4,14 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { SERIF, SANS, MONO } from '@/components/fonts';
 import { fmt } from '@/lib/format';
-import { LISTING_TYPES, HOST_RATES, DEMO_PROFILE_ID } from '@/lib/constants';
+import { LISTING_TYPES, HOST_RATES } from '@/lib/constants';
 import type { AppData, Listing, RequestRow } from '@/lib/types';
 import {
   toggleFavorite,
   createRequest,
   setRequestStatus,
   publishListing,
+  signOut,
 } from '@/app/actions';
 
 type Screen = 'home' | 'explore' | 'detail' | 'booking' | 'host' | 'dash' | 'profile';
@@ -34,7 +35,13 @@ export default function PhoneApp({ data }: { data: AppData }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
 
-  const { listings, profile, requests } = data;
+  const { listings, profile, requests, userEmail } = data;
+
+  // Real, per-user slices of the live data.
+  const myListings = listings.filter((l) => l.owner_id === profile.id);
+  const myListingIds = new Set(myListings.map((l) => l.id));
+  const hostRequests = requests.filter((r) => myListingIds.has(r.listing_id));
+  const myRequests = requests.filter((r) => r.requester_id === profile.id);
 
   // ── navigation + ephemeral UI state (mirrors the prototype's DCLogic) ──────
   const [screen, setScreen] = useState<Screen>('home');
@@ -116,6 +123,24 @@ export default function PhoneApp({ data }: { data: AppData }) {
     });
   }
 
+  function handleSignOut() {
+    startTransition(async () => {
+      await signOut();
+    });
+  }
+
+  // Popular areas, derived live from the actual listing set.
+  function popularAreas() {
+    const byArea = new Map<string, { name: string; city: string; count: number }>();
+    for (const l of listings) {
+      const key = `${l.area}·${l.city}`;
+      const cur = byArea.get(key) ?? { name: l.area, city: l.city, count: 0 };
+      cur.count += 1;
+      byArea.set(key, cur);
+    }
+    return [...byArea.values()].sort((a, b) => b.count - a.count).slice(0, 5);
+  }
+
   function sendRequest() {
     const l = selListing();
     const fallback = 'NL-2026-0' + (4800 + (parseInt(l.num, 10) || 0));
@@ -155,6 +180,16 @@ export default function PhoneApp({ data }: { data: AppData }) {
   const tcol = (k: Screen) => (tab === k ? CLAY : '#A99E8C');
 
   // ── shared atoms ───────────────────────────────────────────────────────────
+  const EmptyState = ({ title, sub, cta }: { title: string; sub: string; cta?: { label: string; onTap: () => void } }) => (
+    <div style={{ margin: '12px 20px 0', background: '#fff', border: `1px dashed ${BORDER}`, borderRadius: 18, padding: '28px 22px', textAlign: 'center' }}>
+      <div style={{ fontFamily: SERIF, fontSize: 21, lineHeight: 1.2 }}>{title}</div>
+      <p style={{ margin: '8px 0 0', fontSize: 13, lineHeight: 1.5, color: MUTED }}>{sub}</p>
+      {cta && (
+        <button onClick={cta.onTap} style={{ marginTop: 16, background: CLAY, color: '#fff', border: 'none', borderRadius: 999, padding: '11px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>{cta.label}</button>
+      )}
+    </div>
+  );
+
   const Star = ({ size = 12 }: { size?: number }) => (
     <svg width={size} height={size} viewBox="0 0 12 12">
       <path
@@ -195,12 +230,7 @@ export default function PhoneApp({ data }: { data: AppData }) {
   // ── HOME ───────────────────────────────────────────────────────────────────
   function Home() {
     const featured = listings.slice(0, 5).map(enrich);
-    const areas = [
-      { name: 'Grünerløkka', city: 'Oslo', count: 38 },
-      { name: 'Sandviken', city: 'Bergen', count: 22 },
-      { name: 'Sagene', city: 'Oslo', count: 24 },
-      { name: 'Lerkendal', city: 'Trondheim', count: 12 },
-    ];
+    const areas = popularAreas();
     return (
       <div>
         {/* top bar */}
@@ -248,6 +278,9 @@ export default function PhoneApp({ data }: { data: AppData }) {
           <h2 style={{ margin: 0, fontFamily: SERIF, fontWeight: 400, fontSize: 25 }}>Utvalgte plasser</h2>
           <button onClick={() => go('explore')} style={{ background: 'none', border: 'none', fontSize: 13, fontWeight: 500, color: CLAY, cursor: 'pointer' }}>Se alle</button>
         </div>
+        {featured.length === 0 && (
+          <EmptyState title="Ingen plasser ennå" sub="Bli den første som legger ut lager i nabolaget." cta={{ label: 'Legg ut plass', onTap: () => go('host') }} />
+        )}
         <div style={{ display: 'flex', gap: 14, overflowX: 'auto', padding: '0 20px 8px' }}>
           {featured.map((l) => (
             <div key={l.id} onClick={() => go('detail', l.id)} style={{ flex: '0 0 250px', cursor: 'pointer' }}>
@@ -275,9 +308,11 @@ export default function PhoneApp({ data }: { data: AppData }) {
         </div>
 
         {/* popular areas */}
+        {areas.length > 0 && (
         <div style={{ padding: '22px 20px 10px' }}>
           <h2 style={{ margin: 0, fontFamily: SERIF, fontWeight: 400, fontSize: 25 }}>Populære områder</h2>
         </div>
+        )}
         <div style={{ padding: '0 20px', display: 'flex', flexDirection: 'column' }}>
           {areas.map((a) => (
             <button key={a.name} onClick={() => go('explore')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px 0', border: 'none', borderBottom: `1px solid ${BORDER}`, background: 'none', cursor: 'pointer', textAlign: 'left', width: '100%' }}>
@@ -702,12 +737,12 @@ export default function PhoneApp({ data }: { data: AppData }) {
 
   // ── DASHBOARD ────────────────────────────────────────────────────────────────
   function Dashboard() {
-    const mine = listings.filter((l) => l.owner_id === DEMO_PROFILE_ID);
-    const reqCountFor = (id: string) => requests.filter((r) => r.listing_id === id).length;
+    const mine = myListings;
+    const reqCountFor = (id: string) => hostRequests.filter((r) => r.listing_id === id).length;
     const reqStatus = (r: RequestRow) => reqOverride[r.id] ?? r.status;
-    const pendingCount = requests.filter((r) => reqStatus(r) === 'pending').length;
+    const pendingCount = hostRequests.filter((r) => reqStatus(r) === 'pending').length;
     const kpiViews = mine.reduce((s, l) => s + l.views, 0);
-    const kpiIncome = mine.filter((l) => l.status === 'rented').reduce((s, l) => s + l.price, 0) || mine.reduce((s, l) => s + l.price, 0);
+    const kpiIncome = mine.filter((l) => l.status === 'rented').reduce((s, l) => s + l.price, 0);
 
     const titleFor = (id: string) => listings.find((l) => l.id === id)?.title ?? '';
     const initialsOf = (name: string) => name.split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('');
@@ -732,7 +767,7 @@ export default function PhoneApp({ data }: { data: AppData }) {
             <div style={{ fontFamily: SERIF, fontSize: 25, lineHeight: 1 }}>{fmt(kpiIncome)}</div>
             <div style={{ fontFamily: MONO, fontSize: 9.5, color: 'rgba(244,239,231,.6)', marginTop: 6, textTransform: 'uppercase', letterSpacing: '.05em' }}>kr i mnd</div>
           </div>
-          {[{ v: kpiViews, k: 'visninger' }, { v: requests.length, k: 'forespørsler' }].map((kpi, i) => (
+          {[{ v: kpiViews, k: 'visninger' }, { v: hostRequests.length, k: 'forespørsler' }].map((kpi, i) => (
             <div key={i} style={{ flex: 1, background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 16, padding: '15px 13px' }}>
               <div style={{ fontFamily: SERIF, fontSize: 25, lineHeight: 1 }}>{kpi.v}</div>
               <div style={{ fontFamily: MONO, fontSize: 9.5, color: MUTED, marginTop: 6, textTransform: 'uppercase', letterSpacing: '.05em' }}>{kpi.k}</div>
@@ -751,6 +786,9 @@ export default function PhoneApp({ data }: { data: AppData }) {
 
         {isList ? (
           <div style={{ padding: '16px 20px 0', display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {mine.length === 0 && (
+              <EmptyState title="Ingen annonser ennå" sub="Legg ut en bod, garasje eller loft og begynn å tjene på plass du ikke bruker." cta={{ label: 'Legg ut plass', onTap: () => go('host') }} />
+            )}
             {mine.map((l) => {
               const statusActive = l.status === 'active';
               return (
@@ -779,7 +817,10 @@ export default function PhoneApp({ data }: { data: AppData }) {
           </div>
         ) : (
           <div style={{ padding: '16px 20px 0', display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {requests.map((r) => {
+            {hostRequests.length === 0 && (
+              <EmptyState title="Ingen forespørsler" sub="Når naboer sender forespørsel på plassene dine, dukker de opp her." />
+            )}
+            {hostRequests.map((r) => {
               const status = reqStatus(r);
               return (
                 <div key={r.id} style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 18, padding: 16 }}>
@@ -818,10 +859,26 @@ export default function PhoneApp({ data }: { data: AppData }) {
 
   // ── PROFILE ──────────────────────────────────────────────────────────────────
   function Profile() {
-    const bookings = [
-      { num: '02', title: 'Garasje ved Sognsvann', period: '1. jun – 1. des 2026', label: 'Aktiv', bg: '#E4EFE7', col: '#2E6646', id: 'l2' },
-      { num: '05', title: 'Kjellerbod i bryggehus', period: 'Fullført apr 2026', label: 'Fullført', bg: '#EDE5D6', col: '#6B6253', id: 'l5' },
-    ];
+    const statusMap: Record<string, { label: string; bg: string; col: string }> = {
+      accepted: { label: 'Aktiv', bg: '#E4EFE7', col: '#2E6646' },
+      pending: { label: 'Venter', bg: '#F5E6DC', col: '#8A5236' },
+      declined: { label: 'Avslått', bg: '#F1EBE0', col: '#8C8275' },
+    };
+    const bookings = myRequests.map((r) => {
+      const l = listings.find((x) => x.id === r.listing_id);
+      const s = statusMap[reqOverride[r.id] ?? r.status] ?? statusMap.pending;
+      return {
+        key: r.id,
+        num: l?.num ?? '—',
+        title: l?.title ?? 'Plass',
+        period: r.period_from && r.period_to ? `${r.period_from} – ${r.period_to}` : r.time_label ?? '',
+        label: s.label,
+        bg: s.bg,
+        col: s.col,
+        id: r.listing_id,
+      };
+    });
+    const tenancyCount = myRequests.filter((r) => (reqOverride[r.id] ?? r.status) === 'accepted').length;
     const settings = [
       { label: 'Konto og verifisering', ic: '#F5E6DC' },
       { label: 'Varsler', ic: '#E4EFE7' },
@@ -843,13 +900,13 @@ export default function PhoneApp({ data }: { data: AppData }) {
                 <span style={{ fontSize: 19, fontWeight: 600 }}>{profile.name}</span>
                 <Verified size={16} />
               </div>
-              <div style={{ fontFamily: MONO, fontSize: 11, color: MUTED, marginTop: 4 }}>Medlem siden {profile.member_since} · {profile.city}</div>
+              <div style={{ fontFamily: MONO, fontSize: 11, color: MUTED, marginTop: 4 }}>{userEmail ?? `Medlem siden ${profile.member_since}`}</div>
             </div>
           </div>
           <div style={{ display: 'flex', marginTop: 18, paddingTop: 18, borderTop: '1px solid #EFE9DD' }}>
             {[
-              { v: profile.tenancies, k: 'leieforhold', border: false },
-              { v: profile.as_host, k: 'som vert', border: true },
+              { v: tenancyCount, k: 'leieforhold', border: false },
+              { v: myListings.length, k: 'som vert', border: true },
               { v: Number(profile.rating).toFixed(1), k: 'vurdering', border: false },
             ].map((s, i) => (
               <div key={i} style={{ flex: 1, textAlign: 'center', borderLeft: s.border ? '1px solid #EFE9DD' : undefined, borderRight: s.border ? '1px solid #EFE9DD' : undefined }}>
@@ -862,9 +919,14 @@ export default function PhoneApp({ data }: { data: AppData }) {
 
         <div style={{ padding: '26px 20px 0' }}>
           <h2 style={{ margin: '0 0 14px', fontFamily: SERIF, fontWeight: 400, fontSize: 24 }}>Mine leieforhold</h2>
+          {bookings.length === 0 && (
+            <div style={{ background: '#fff', border: `1px dashed ${BORDER}`, borderRadius: 16, padding: '22px', textAlign: 'center', fontSize: 13, color: MUTED, lineHeight: 1.5 }}>
+              Ingen leieforhold ennå. Finn en plass under Utforsk og send en forespørsel.
+            </div>
+          )}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {bookings.map((b) => (
-              <div key={b.num} onClick={() => go('detail', b.id)} style={{ display: 'flex', alignItems: 'center', gap: 13, background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 16, padding: 13, cursor: 'pointer' }}>
+              <div key={b.key} onClick={() => go('detail', b.id)} style={{ display: 'flex', alignItems: 'center', gap: 13, background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 16, padding: 13, cursor: 'pointer' }}>
                 <div style={{ position: 'relative', flex: '0 0 56px', height: 56, borderRadius: 11, overflow: 'hidden', background: 'repeating-linear-gradient(135deg, #E7DECF 0 8px, #EFE7D9 8px 16px)' }}>
                   <div style={{ position: 'absolute', left: 5, bottom: 4, fontFamily: SERIF, fontSize: 11, color: '#fff', textShadow: '0 1px 2px rgba(0,0,0,.5)' }}>№{b.num}</div>
                 </div>
@@ -892,7 +954,7 @@ export default function PhoneApp({ data }: { data: AppData }) {
         </div>
 
         <div style={{ padding: '22px 20px 0' }}>
-          <button style={{ width: '100%', background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 14, padding: 15, fontSize: 15, fontWeight: 600, color: '#B23A2E', cursor: 'pointer' }}>Logg ut</button>
+          <button onClick={handleSignOut} style={{ width: '100%', background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 14, padding: 15, fontSize: 15, fontWeight: 600, color: '#B23A2E', cursor: 'pointer' }}>Logg ut</button>
           <div style={{ textAlign: 'center', fontFamily: MONO, fontSize: 10, color: '#B8AE9C', marginTop: 18 }}>NABOLAGER v1.0 · ET NORSK PILOTPROSJEKT</div>
         </div>
         <div style={{ height: 120 }} />

@@ -37,6 +37,7 @@ export interface RequestRow {
   id: string;
   req_id: string | null;
   listing_id: string;
+  requester_id: string | null;
   from_name: string;
   from_phone: string | null;
   message: string;
@@ -64,4 +65,5 @@ export interface AppData {
   profile: Profile;
   favoriteIds: string[];
   requests: RequestRow[];
+  userEmail: string | null;
 }

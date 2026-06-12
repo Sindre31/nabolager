@@ -1,10 +1,7 @@
--- Nabolager — seed data (ported verbatim from the design prototype)
--- Run after 0001_init.sql.
-
--- Demo user / host -----------------------------------------------------------
-insert into public.profiles (id, name, initials, city, member_since, rating, tenancies, as_host)
-values ('00000000-0000-0000-0000-000000000001', 'Ola Nordmann', 'O', 'Oslo', '2026', 4.9, 2, 2)
-on conflict (id) do nothing;
+-- Nabolager — launch inventory (real, browsable listings).
+-- Run after 0001_init.sql. No demo user: per-user data (profiles, favourites,
+-- requests, ownership) is created by real sign-ins. owner_id is null — these
+-- are launch-partner spaces with no app-managed host account.
 
 -- Listings -------------------------------------------------------------------
 insert into public.listings
@@ -19,14 +16,14 @@ values
   'Du får egen kodelås. Felles trapp opp til gateplan.',
   array['Ikke brann-/eksplosjonsfarlig','Ikke matvarer','Forsikring opptil 50 000 kr'],
   '{"x":30,"y":40}','Marte Hagen','MH','2024',true,4.9,47,
-  '00000000-0000-0000-0000-000000000001','active',128),
+  null,'active',128),
 ('l2','02','Garasje ved Sognsvann','Garasje','Oslo','Nordberg','Ved hovedvei',18,45,1490,4.8,28,'garasje · 18 m²','Ledig nå',
   array['Bil-tilgang','Strømuttak','Egen port','24/7 tilgang'],
   'Frittstående enkeltgarasje på egen tomt. Kan brukes til bil, motorsykkel eller som rent lager. Strømuttak til lader. Asfaltert innkjørsel.',
   'Egen port med portåpner. Asfaltert innkjørsel helt frem.',
   array['Ingen overnatting','Ikke kjemikalielagring','Tobakksfritt'],
   '{"x":18,"y":22}','Erik Bjerke','EB','2023',true,4.8,28,
-  '00000000-0000-0000-0000-000000000001','rented',64),
+  null,'active',64),
 ('l3','03','Loft over snekkerverksted','Loft','Oslo','Sagene','5 min fra Torshov',22,48,1190,5.0,63,'loft · 22 m²','Ledig fra 1. juni',
   array['Tørt og temperert','Heisbar','Tilgang dagtid'],
   'Stort åpent loft med god takhøyde i midten. Egnet for store gjenstander, sesongvarer og lett næringslager. Trebjelker og takvindu.',
@@ -76,17 +73,4 @@ values
   array['Bemannet 07–18','Ikke farlig gods'],
   '{"x":30,"y":84}','Midt Lager AS','ML','2020',true,4.8,64,
   null,'active',0)
-on conflict (id) do nothing;
-
--- Favourites (matches design: l1, l3 saved by the demo user) -----------------
-insert into public.favorites (profile_id, listing_id) values
-('00000000-0000-0000-0000-000000000001','l1'),
-('00000000-0000-0000-0000-000000000001','l3')
-on conflict do nothing;
-
--- Incoming booking requests (host inbox) -------------------------------------
-insert into public.requests (id, listing_id, from_name, message, time_label, status) values
-('00000000-0000-0000-0000-0000000000a1','l1','Martin Berg','Hei! Er den ledig fra 1. juni i tre måneder?','I dag 14:22','pending'),
-('00000000-0000-0000-0000-0000000000a2','l2','Emma Johansen','Funker plassen for en varebil (Transporter)?','I går','pending'),
-('00000000-0000-0000-0000-0000000000a3','l1','Lars Sørensen','Kan jeg komme på en kjapp visning lørdag?','Tirsdag','pending')
 on conflict (id) do nothing;

@@ -1,36 +1,48 @@
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { DEMO_PROFILE_ID } from '@/lib/constants';
 import type { AppData, Listing, Profile, RequestRow } from '@/lib/types';
 
 /**
- * Loads everything the phone app needs in one server round-trip.
- * Runs as the demo user (no auth in this pilot).
+ * Loads everything the phone app needs for the signed-in user.
+ * Returns null when there is no authenticated session (→ show the auth screen).
  */
-export async function loadAppData(): Promise<AppData> {
+export async function loadAppData(): Promise<AppData | null> {
   const supabase = await createSupabaseServerClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
 
   const [listingsRes, profileRes, favRes, reqRes] = await Promise.all([
     supabase.from('listings').select('*').order('num', { ascending: true }),
-    supabase.from('profiles').select('*').eq('id', DEMO_PROFILE_ID).single(),
-    supabase.from('favorites').select('listing_id').eq('profile_id', DEMO_PROFILE_ID),
+    supabase.from('profiles').select('*').eq('id', user.id).single(),
+    supabase.from('favorites').select('listing_id').eq('profile_id', user.id),
+    // RLS returns the rows this user is allowed to see: requests they sent,
+    // plus requests for listings they host.
     supabase.from('requests').select('*').order('created_at', { ascending: false }),
   ]);
 
   if (listingsRes.error) throw listingsRes.error;
 
   const listings = (listingsRes.data ?? []) as Listing[];
+
+  // The signup trigger creates the profile; fall back to user metadata if it
+  // hasn't propagated yet on the very first load.
+  const meta = (user.user_metadata ?? {}) as { name?: string };
+  const fallbackName = meta.name || user.email?.split('@')[0] || 'Nabo';
   const profile = (profileRes.data ?? {
-    id: DEMO_PROFILE_ID,
-    name: 'Ola Nordmann',
-    initials: 'O',
+    id: user.id,
+    name: fallbackName,
+    initials: fallbackName.slice(0, 1).toUpperCase(),
     city: 'Oslo',
-    member_since: '2026',
-    rating: 4.9,
-    tenancies: 2,
-    as_host: 2,
+    member_since: String(new Date().getFullYear()),
+    rating: 5.0,
+    tenancies: 0,
+    as_host: 0,
   }) as Profile;
+
   const favoriteIds = (favRes.data ?? []).map((f) => f.listing_id as string);
   const requests = (reqRes.data ?? []) as RequestRow[];
 
-  return { listings, profile, favoriteIds, requests };
+  return { listings, profile, favoriteIds, requests, userEmail: user.email ?? null };
 }

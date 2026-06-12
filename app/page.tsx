@@ -1,10 +1,11 @@
 import IOSDevice from '@/components/IOSDevice';
 import PhoneApp from '@/components/PhoneApp';
+import AuthScreen from '@/components/AuthScreen';
 import SetupNotice from '@/components/SetupNotice';
 import { hasSupabaseEnv } from '@/lib/supabase/server';
 import { loadAppData } from '@/lib/data';
 
-// Always render fresh data (favourites, requests and new listings change live).
+// Always render fresh data (favourites, requests and listings change live).
 export const dynamic = 'force-dynamic';
 
 const Stage = ({ children }: { children: React.ReactNode }) => (
@@ -32,10 +33,11 @@ export default async function Page() {
 
   try {
     const data = await loadAppData();
-    if (!data.listings.length) {
+    // Not signed in → the app is gated behind login/registration.
+    if (!data) {
       return (
         <Stage>
-          <SetupNotice reason="empty" />
+          <AuthScreen />
         </Stage>
       );
     }
