@@ -29,10 +29,26 @@ npm install
 
 ### 2. Create a Supabase project
 
-At [supabase.com](https://supabase.com), create a project. Then in **SQL Editor**, run:
+At [supabase.com](https://supabase.com), create a project. Then in **SQL Editor**, run, in order:
 
-1. `supabase/migrations/0001_init.sql` — tables, indexes, demo RLS policies
-2. `supabase/seed.sql` — the listings, host inbox and demo profile from the design
+1. `supabase/migrations/0001_init.sql` — tables + indexes
+2. `supabase/seed.sql` — launch inventory (the listings)
+3. `supabase/migrations/0002_auth.sql` — signup trigger + per-user RLS
+
+> Already ran the *old* seed (with the demo user)? Also run
+> `supabase/migrations/0003_make_real.sql` once to strip the demo rows.
+
+### Auth (magic link) — URL configuration
+
+In **Authentication → URL Configuration**, set:
+
+- **Site URL**: your deployed origin (e.g. `https://nabolager-five.vercel.app`)
+- **Redirect URLs** (add both):
+  - `https://<your-domain>/auth/callback`
+  - `http://localhost:3000/auth/callback`
+
+Email auth is on by default; magic links use Supabase's built-in mailer
+(rate-limited on the free tier — add SMTP for volume).
 
 ### 3. Add credentials
 
@@ -62,10 +78,12 @@ Everything reads from and writes to Postgres:
 
 | Action | Table | Server action |
 | --- | --- | --- |
+| Log in / register (magic link) | `auth.users` → `profiles` (trigger) | `signInWithOtp` (client) |
 | Save / unsave a listing (heart) | `favorites` | `toggleFavorite` |
 | Send a booking request | `requests` | `createRequest` → returns Forespørsel-ID |
 | Accept / decline a request (host inbox) | `requests.status` | `setRequestStatus` |
 | Publish a new listing (Bli vert) | `listings` | `publishListing` |
+| Sign out | — | `signOut` |
 
 Mutations are optimistic in the UI and persisted via server actions that
 `revalidatePath('/')`, so a refresh reflects the database.
@@ -77,9 +95,13 @@ See `lib/types.ts`.
 
 ## Notes / decisions
 
-- **No auth yet.** Everything runs as one seeded demo user
-  (`DEMO_PROFILE_ID` in `lib/constants.ts`). RLS policies are **open to the anon role**
-  for the pilot — scope them by `auth.uid()` before any real launch.
+- **Auth required.** The app is gated behind magic-link login/registration; all
+  per-user data (favourites, requests, owned listings, profile) is scoped to
+  `auth.uid()` via RLS (`0002_auth.sql`). A signup trigger creates the `profiles`
+  row. Returning-user **Face ID (WebAuthn passkeys)** is the planned next step.
+- **Real, not demo.** Profile, dashboard KPIs, tenancies and popular areas all
+  derive from the signed-in user and live data, with empty states. The seeded
+  listings are real browsable launch inventory (`owner_id` null until claimed).
 - **Date pickers** in booking are visual (fixed 15. mai – 15. aug), as in the prototype.
 - **Photos** are the design's striped placeholders, ready for real images.
 - The host income calculator and price ranges use the design's per-type rates
