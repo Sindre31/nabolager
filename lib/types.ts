@@ -67,3 +67,33 @@ export interface AppData {
   requests: RequestRow[];
   userEmail: string | null;
 }
+
+export interface CreateRequestInput {
+  listingId: string;
+  listingNum: string;
+  fromName: string;
+  fromPhone: string;
+  message: string;
+  periodFrom?: string;
+  periodTo?: string;
+}
+
+export interface PublishInput {
+  type: string;
+  sizeM2: number;
+  area: string;
+  price: number;
+}
+
+/**
+ * The 5 mutations PhoneApp needs, injected as props so the same UI works
+ * against either the real Supabase server actions (app/actions.ts) or the
+ * no-Supabase local/localStorage implementation (lib/local/store.ts).
+ */
+export interface PhoneAppActions {
+  toggleFavorite: (listingId: string, makeFavorite: boolean) => Promise<void>;
+  createRequest: (input: CreateRequestInput) => Promise<{ reqId: string }>;
+  setRequestStatus: (requestId: string, status: 'accepted' | 'declined') => Promise<void>;
+  publishListing: (input: PublishInput) => Promise<{ id: string }>;
+  signOut: () => Promise<void>;
+}

@@ -5,14 +5,7 @@ import { useRouter } from 'next/navigation';
 import { SERIF, SANS, MONO } from '@/components/fonts';
 import { fmt } from '@/lib/format';
 import { LISTING_TYPES, HOST_RATES } from '@/lib/constants';
-import type { AppData, Listing, RequestRow } from '@/lib/types';
-import {
-  toggleFavorite,
-  createRequest,
-  setRequestStatus,
-  publishListing,
-  signOut,
-} from '@/app/actions';
+import type { AppData, Listing, PhoneAppActions, RequestRow } from '@/lib/types';
 
 type Screen = 'home' | 'explore' | 'detail' | 'booking' | 'host' | 'dash' | 'profile';
 const TAB_SCREENS: Screen[] = ['home', 'explore', 'host', 'dash', 'profile'];
@@ -31,7 +24,7 @@ interface EnrichedListing extends Listing {
   ratingFmt: string;
 }
 
-export default function PhoneApp({ data }: { data: AppData }) {
+export default function PhoneApp({ data, actions }: { data: AppData; actions: PhoneAppActions }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
 
@@ -119,13 +112,13 @@ export default function PhoneApp({ data }: { data: AppData }) {
     const next = !isFav(id);
     setFavOverride((m) => ({ ...m, [id]: next }));
     startTransition(async () => {
-      await toggleFavorite(id, next);
+      await actions.toggleFavorite(id, next);
     });
   }
 
   function handleSignOut() {
     startTransition(async () => {
-      await signOut();
+      await actions.signOut();
     });
   }
 
@@ -148,7 +141,7 @@ export default function PhoneApp({ data }: { data: AppData }) {
     setBStep(3);
     startTransition(async () => {
       try {
-        const { reqId } = await createRequest({
+        const { reqId } = await actions.createRequest({
           listingId: l.id,
           listingNum: l.num,
           fromName: bName,
@@ -650,7 +643,7 @@ export default function PhoneApp({ data }: { data: AppData }) {
       setHPublished(true);
       startTransition(async () => {
         try {
-          await publishListing({ type: hType, sizeM2: hSize, area: hArea, price: est });
+          await actions.publishListing({ type: hType, sizeM2: hSize, area: hArea, price: est });
           router.refresh();
         } catch {
           /* still show success in the prototype */
@@ -750,7 +743,7 @@ export default function PhoneApp({ data }: { data: AppData }) {
     function act(r: RequestRow, status: 'accepted' | 'declined') {
       setReqOverride((m) => ({ ...m, [r.id]: status }));
       startTransition(async () => {
-        await setRequestStatus(r.id, status);
+        await actions.setRequestStatus(r.id, status);
       });
     }
 
