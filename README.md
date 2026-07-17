@@ -50,6 +50,19 @@ In **Authentication → URL Configuration**, set:
 Email auth is on by default; magic links use Supabase's built-in mailer
 (rate-limited on the free tier — add SMTP for volume).
 
+### Demo mode (try without an email)
+
+The auth screen has a **"Prøv Nabolager som gjest"** button that signs the
+visitor in with Supabase Anonymous Sign-ins — no email round-trip needed.
+It requires one toggle in the dashboard:
+
+- **Authentication → Providers → Anonymous Sign-ins → Enable**
+
+Each guest gets their own isolated `auth.uid()` (so favourites/requests work
+normally via existing RLS), named "Demo-gjest" in the UI. Guest accounts are
+real rows in `auth.users`; periodically prune them if you want to keep the
+project tidy (`delete from auth.users where is_anonymous = true`).
+
 ### 3. Add credentials
 
 ```bash

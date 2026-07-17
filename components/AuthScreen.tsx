@@ -14,7 +14,7 @@ const BODY = '#4A4239';
 export default function AuthScreen() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error' | 'demo'>('idle');
   const [error, setError] = useState('');
 
   async function sendLink() {
@@ -36,6 +36,21 @@ export default function AuthScreen() {
     } else {
       setStatus('sent');
     }
+  }
+
+  async function tryDemo() {
+    setStatus('demo');
+    setError('');
+    const supabase = createSupabaseBrowserClient();
+    const { error } = await supabase.auth.signInAnonymously({
+      options: { data: { name: 'Demo-gjest' } },
+    });
+    if (error) {
+      setError(error.message);
+      setStatus('error');
+      return;
+    }
+    window.location.href = '/';
   }
 
   const labelStyle = {
@@ -147,6 +162,34 @@ export default function AuthScreen() {
           >
             {status === 'sending' ? 'Sender …' : 'Send innloggingslenke'}
           </button>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '18px 0' }}>
+            <div style={{ flex: 1, height: 1, background: BORDER }} />
+            <span style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '.08em', textTransform: 'uppercase', color: MUTED }}>eller</span>
+            <div style={{ flex: 1, height: 1, background: BORDER }} />
+          </div>
+
+          <button
+            onClick={tryDemo}
+            disabled={status === 'demo'}
+            style={{
+              width: '100%',
+              background: '#fff',
+              color: INK,
+              border: `1px solid ${BORDER}`,
+              borderRadius: 999,
+              padding: 15,
+              fontSize: 15,
+              fontWeight: 600,
+              cursor: status === 'demo' ? 'default' : 'pointer',
+              opacity: status === 'demo' ? 0.6 : 1,
+            }}
+          >
+            {status === 'demo' ? 'Åpner demo …' : 'Prøv Nabolager som gjest'}
+          </button>
+          <p style={{ margin: '10px 0 0', fontSize: 11.5, lineHeight: 1.5, color: MUTED }}>
+            Ingen e-post nødvendig — du får en midlertidig gjestekonto for å utforske appen.
+          </p>
 
           <p style={{ marginTop: 'auto', paddingTop: 28, fontSize: 11, lineHeight: 1.6, color: MUTED }}>
             Ved å logge inn godtar du vilkårene. <b style={{ color: '#6B6253' }}>Nabolager er en formidlingstjeneste</b> — avtaler inngås direkte mellom nabo og nabo.
