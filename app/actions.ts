@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { User } from '@supabase/supabase-js';
+import type { CreateRequestInput, PublishInput } from '@/lib/types';
 
 async function requireUser(): Promise<{ supabase: SupabaseClient; user: User }> {
   const supabase = await createSupabaseServerClient();
@@ -31,16 +32,6 @@ export async function toggleFavorite(listingId: string, makeFavorite: boolean) {
 }
 
 // ── Booking request (send forespørsel) ──────────────────────────────────────
-export interface CreateRequestInput {
-  listingId: string;
-  listingNum: string;
-  fromName: string;
-  fromPhone: string;
-  message: string;
-  periodFrom?: string;
-  periodTo?: string;
-}
-
 export async function createRequest(input: CreateRequestInput): Promise<{ reqId: string }> {
   const { supabase, user } = await requireUser();
   const reqId = 'NL-2026-0' + (4800 + (parseInt(input.listingNum, 10) || 0));
@@ -69,13 +60,6 @@ export async function setRequestStatus(requestId: string, status: 'accepted' | '
 }
 
 // ── Publish a new listing (Bli vert) ────────────────────────────────────────
-export interface PublishInput {
-  type: string;
-  sizeM2: number;
-  area: string;
-  price: number;
-}
-
 export async function publishListing(input: PublishInput): Promise<{ id: string }> {
   const { supabase, user } = await requireUser();
 

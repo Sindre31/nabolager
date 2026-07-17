@@ -4,6 +4,9 @@ A neighbourhood storage marketplace — rent a nabo's bod, garasje, loft or cont
 or list your own. Built from the Claude Design prototype (`Nabolager.dc.html`) as a
 **Next.js** app with **live Supabase** data, rendered inside an iOS device frame.
 
+> **No Supabase project configured?** The app runs as a fully working,
+> no-backend demo instead — see "No-Supabase local demo mode" below.
+
 > Warm sand palette · Instrument Serif headlines · Geist UI · Geist Mono labels ·
 > terracotta accent · muted-green "ledig" signal · formidler (broker) model.
 
@@ -69,8 +72,32 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon public key>
 npm run dev
 ```
 
-Open <http://localhost:3000>. Until the env vars are set (or if the tables are empty),
-the app shows an in-frame setup notice with these same steps.
+Open <http://localhost:3000>.
+
+## No-Supabase local demo mode
+
+Without `NEXT_PUBLIC_SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_ANON_KEY` set (locally
+or on the deployment), `app/page.tsx` renders `<LocalApp>` instead of the
+Supabase-backed flow. It's the same UI and the same 9 launch listings
+(ported from `supabase/seed.sql`), but:
+
+- "Login" is just a name — no email, no account, sets a profile in
+  `localStorage` (`nabolager_local_v1`)
+- Favourites, booking requests and publishing a listing all read/write that
+  same `localStorage` blob via `lib/local/store.ts`, instead of calling the
+  server actions in `app/actions.ts`
+- Nothing leaves the browser; every visitor gets their own independent,
+  empty-by-default (well, 9-listings-by-default) sandbox
+
+This also kicks in automatically if Supabase env vars are set but the
+project is unreachable (deleted, wrong keys, etc.) — see the `catch` branch
+in `app/page.tsx`. Useful for demoing the app publicly without paying for
+or maintaining a real Supabase project.
+
+`components/PhoneApp.tsx` doesn't know which mode it's in — it takes a
+`data: AppData` + `actions: PhoneAppActions` prop pair, and `app/page.tsx`
+wires either the real server actions or `LocalApp`'s local-storage
+equivalents into that same shape.
 
 ## What's actually live
 
@@ -111,15 +138,17 @@ See `lib/types.ts`.
 
 ```
 app/
-  page.tsx          server: load data → render frame + app (or setup notice)
+  page.tsx          server: load data → render frame + app (Supabase or local)
   actions.ts        server actions (favorites, requests, publish)
   layout.tsx        fonts + metadata
 components/
   IOSDevice.tsx     iOS 26 device frame
   PhoneApp.tsx      all 7 screens + navigation + optimistic state
-  SetupNotice.tsx   in-frame onboarding when Supabase isn't wired
+  LocalApp.tsx      no-Supabase demo: name-only "login" + local data
 lib/
-  data.ts           single server round-trip loader
+  data.ts           single server round-trip loader (Supabase mode)
+  local/store.ts    localStorage data layer (no-Supabase mode)
+  local/seed-listings.ts
   supabase/server.ts
   types.ts  constants.ts  format.ts
 supabase/

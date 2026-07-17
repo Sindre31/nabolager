@@ -1,9 +1,10 @@
 import IOSDevice from '@/components/IOSDevice';
 import PhoneApp from '@/components/PhoneApp';
 import AuthScreen from '@/components/AuthScreen';
-import SetupNotice from '@/components/SetupNotice';
+import LocalApp from '@/components/LocalApp';
 import { hasSupabaseEnv } from '@/lib/supabase/server';
 import { loadAppData } from '@/lib/data';
+import * as serverActions from '@/app/actions';
 
 // Always render fresh data (favourites, requests and listings change live).
 export const dynamic = 'force-dynamic';
@@ -23,10 +24,12 @@ const Stage = ({ children }: { children: React.ReactNode }) => (
 );
 
 export default async function Page() {
+  // No Supabase project wired up (or it's since been torn down) → run as a
+  // fully local, no-backend demo instead of dead-ending on a setup screen.
   if (!hasSupabaseEnv()) {
     return (
       <Stage>
-        <SetupNotice reason="env" />
+        <LocalApp />
       </Stage>
     );
   }
@@ -43,13 +46,15 @@ export default async function Page() {
     }
     return (
       <Stage>
-        <PhoneApp data={data} />
+        <PhoneApp data={data} actions={serverActions} />
       </Stage>
     );
-  } catch (err) {
+  } catch {
+    // Supabase env vars are set but the project is unreachable/misconfigured
+    // (e.g. torn down) — same fallback as the missing-env case above.
     return (
       <Stage>
-        <SetupNotice reason="error" message={err instanceof Error ? err.message : String(err)} />
+        <LocalApp />
       </Stage>
     );
   }
