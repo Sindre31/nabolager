@@ -11,7 +11,7 @@ const BORDER = '#E7E0D4';
 const MUTED = '#9A8F7E';
 const BODY = '#4A4239';
 
-export default function AuthScreen() {
+export default function AuthScreen({ onBack }: { onBack?: () => void } = {}) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
@@ -73,7 +73,15 @@ export default function AuthScreen() {
         overflowY: 'auto',
       }}
     >
-      <div style={{ paddingTop: 92, display: 'flex', alignItems: 'center', gap: 9, marginBottom: 30 }}>
+      <div style={{ paddingTop: 56, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        {onBack ? (
+          <button onClick={onBack} style={{ width: 38, height: 38, borderRadius: 999, background: '#fff', border: `1px solid ${BORDER}`, display: 'grid', placeItems: 'center', cursor: 'pointer' }}>
+            <svg width="11" height="18" viewBox="0 0 12 20" fill="none"><path d="M10 2L2 10l8 8" stroke={INK} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          </button>
+        ) : <span />}
+      </div>
+
+      <div style={{ paddingTop: 36, display: 'flex', alignItems: 'center', gap: 9, marginBottom: 30 }}>
         <div style={{ width: 30, height: 30, borderRadius: 8, background: INK, position: 'relative', display: 'grid', placeItems: 'center' }}>
           <div style={{ width: 13, height: 10, border: `2px solid ${CLAY}`, borderBottom: 0, borderRadius: '3px 3px 0 0', marginBottom: 2 }} />
         </div>

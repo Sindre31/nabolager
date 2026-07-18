@@ -6,6 +6,7 @@ import { SERIF, SANS, MONO } from '@/components/fonts';
 import { fmt } from '@/lib/format';
 import { LISTING_TYPES, HOST_RATES } from '@/lib/constants';
 import type { AppData, Listing, RequestRow } from '@/lib/types';
+import AuthScreen from '@/components/AuthScreen';
 import {
   toggleFavorite,
   createRequest,
@@ -14,7 +15,7 @@ import {
   signOut,
 } from '@/app/actions';
 
-type Screen = 'home' | 'explore' | 'detail' | 'booking' | 'host' | 'dash' | 'profile';
+type Screen = 'home' | 'explore' | 'detail' | 'booking' | 'host' | 'dash' | 'profile' | 'auth';
 const TAB_SCREENS: Screen[] = ['home', 'explore', 'host', 'dash', 'profile'];
 
 // palette
@@ -35,7 +36,7 @@ export default function PhoneApp({ data }: { data: AppData }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
 
-  const { listings, profile, requests, userEmail } = data;
+  const { listings, profile, requests, userEmail, isGuest } = data;
 
   // Real, per-user slices of the live data.
   const myListings = listings.filter((l) => l.owner_id === profile.id);
@@ -87,12 +88,20 @@ export default function PhoneApp({ data }: { data: AppData }) {
   const selListing = () => listings.find((l) => l.id === sel) ?? listings[0];
 
   function go(next: Screen, id?: string) {
-    const push = next === 'detail' || next === 'booking';
+    const push = next === 'detail' || next === 'booking' || next === 'auth';
     setHist((h) => (push ? [...h, screen] : h));
     if (id !== undefined) setSel(id);
     if (next === 'booking') setBStep(0);
     if (TAB_SCREENS.includes(next)) setTab(next);
     setScreen(next);
+  }
+
+  // Browsing works with no account; actions that write data (favourite, book,
+  // publish) route a guest to the login screen instead of hitting the server
+  // action, which would just throw ("Not authenticated").
+  function requireAuth(action: () => void) {
+    if (isGuest) { go('auth'); return; }
+    action();
   }
 
   function back() {
@@ -116,10 +125,12 @@ export default function PhoneApp({ data }: { data: AppData }) {
   }
 
   function handleToggleFav(id: string) {
-    const next = !isFav(id);
-    setFavOverride((m) => ({ ...m, [id]: next }));
-    startTransition(async () => {
-      await toggleFavorite(id, next);
+    requireAuth(() => {
+      const next = !isFav(id);
+      setFavOverride((m) => ({ ...m, [id]: next }));
+      startTransition(async () => {
+        await toggleFavorite(id, next);
+      });
     });
   }
 
@@ -251,6 +262,14 @@ export default function PhoneApp({ data }: { data: AppData }) {
             </div>
           </div>
         </div>
+
+        {/* guest notice */}
+        {isGuest && (
+          <div style={{ margin: '14px 20px 0', display: 'flex', alignItems: 'center', gap: 12, background: '#F5E6DC', border: '1px solid #E9C7B8', borderRadius: 14, padding: '12px 14px' }}>
+            <span style={{ flex: 1, fontSize: 12.5, lineHeight: 1.5, color: '#8A5236' }}>Du ser en demoversjon. Logg inn for å lagre favoritter, sende forespørsler og legge ut annonser.</span>
+            <button onClick={() => go('auth')} style={{ flexShrink: 0, background: CLAY, color: '#fff', border: 'none', borderRadius: 999, padding: '9px 14px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>Logg inn</button>
+          </div>
+        )}
 
         {/* hero */}
         <div style={{ padding: '14px 20px 6px' }}>
@@ -517,7 +536,7 @@ export default function PhoneApp({ data }: { data: AppData }) {
               </div>
               <div style={{ fontFamily: MONO, fontSize: 11, color: MUTED, marginTop: 3 }}>Vert siden {l.host_since} · ★ {Number(l.host_rating).toFixed(1)}</div>
             </div>
-            <button onClick={() => go('booking', l.id)} style={{ background: SAND, border: `1px solid ${BORDER}`, borderRadius: 999, padding: '10px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', color: INK }}>Melding</button>
+            <button onClick={() => requireAuth(() => go('booking', l.id))} style={{ background: SAND, border: `1px solid ${BORDER}`, borderRadius: 999, padding: '10px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', color: INK }}>Melding</button>
           </div>
         </div>
 
@@ -728,7 +747,7 @@ export default function PhoneApp({ data }: { data: AppData }) {
             <div style={{ flex: 1, height: 80, borderRadius: 13, background: 'repeating-linear-gradient(135deg, #E7DECF 0 8px, #EFE7D9 8px 16px)' }} />
             <div style={{ flex: 1, height: 80, borderRadius: 13, background: 'repeating-linear-gradient(135deg, #E7DECF 0 8px, #EFE7D9 8px 16px)' }} />
           </div>
-          <button onClick={publish} style={{ width: '100%', marginTop: 26, background: CLAY, color: '#fff', border: 'none', borderRadius: 999, padding: 16, fontSize: 15, fontWeight: 600, cursor: 'pointer', boxShadow: '0 4px 14px rgba(194,104,63,.28)' }}>Publiser annonse</button>
+          <button onClick={() => requireAuth(publish)} style={{ width: '100%', marginTop: 26, background: CLAY, color: '#fff', border: 'none', borderRadius: 999, padding: 16, fontSize: 15, fontWeight: 600, cursor: 'pointer', boxShadow: '0 4px 14px rgba(194,104,63,.28)' }}>Publiser annonse</button>
         </div>
         <div style={{ height: 120 }} />
       </div>
@@ -900,7 +919,7 @@ export default function PhoneApp({ data }: { data: AppData }) {
                 <span style={{ fontSize: 19, fontWeight: 600 }}>{profile.name}</span>
                 <Verified size={16} />
               </div>
-              <div style={{ fontFamily: MONO, fontSize: 11, color: MUTED, marginTop: 4 }}>{userEmail ?? `Medlem siden ${profile.member_since}`}</div>
+              <div style={{ fontFamily: MONO, fontSize: 11, color: MUTED, marginTop: 4 }}>{isGuest ? 'Ikke innlogget' : (userEmail ?? `Medlem siden ${profile.member_since}`)}</div>
             </div>
           </div>
           <div style={{ display: 'flex', marginTop: 18, paddingTop: 18, borderTop: '1px solid #EFE9DD' }}>
@@ -954,7 +973,11 @@ export default function PhoneApp({ data }: { data: AppData }) {
         </div>
 
         <div style={{ padding: '22px 20px 0' }}>
-          <button onClick={handleSignOut} style={{ width: '100%', background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 14, padding: 15, fontSize: 15, fontWeight: 600, color: '#B23A2E', cursor: 'pointer' }}>Logg ut</button>
+          {isGuest ? (
+            <button onClick={() => go('auth')} style={{ width: '100%', background: CLAY, border: 'none', borderRadius: 14, padding: 15, fontSize: 15, fontWeight: 600, color: '#fff', cursor: 'pointer' }}>Logg inn</button>
+          ) : (
+            <button onClick={handleSignOut} style={{ width: '100%', background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 14, padding: 15, fontSize: 15, fontWeight: 600, color: '#B23A2E', cursor: 'pointer' }}>Logg ut</button>
+          )}
           <div style={{ textAlign: 'center', fontFamily: MONO, fontSize: 10, color: '#B8AE9C', marginTop: 18 }}>NABOLAGER v1.0 · ET NORSK PILOTPROSJEKT</div>
         </div>
         <div style={{ height: 120 }} />
@@ -1006,6 +1029,7 @@ export default function PhoneApp({ data }: { data: AppData }) {
         {screen === 'host' && <Host />}
         {screen === 'dash' && <Dashboard />}
         {screen === 'profile' && <Profile />}
+        {screen === 'auth' && <AuthScreen onBack={back} />}
       </div>
 
       {showTabBar && <TabBar />}
@@ -1022,7 +1046,7 @@ export default function PhoneApp({ data }: { data: AppData }) {
             <div style={{ fontFamily: SERIF, fontSize: 26, lineHeight: 1 }}>{fmt(selListing().price)}<span style={{ fontSize: 13, color: '#8C8275', fontFamily: SANS }}> kr/mnd</span></div>
             <div style={{ fontFamily: MONO, fontSize: 10, color: MUTED, marginTop: 3, textTransform: 'uppercase' }}>Ingen binding</div>
           </div>
-          <button onClick={() => go('booking', selListing().id)} style={{ background: CLAY, color: '#fff', border: 'none', borderRadius: 999, padding: '15px 26px', fontSize: 15, fontWeight: 600, cursor: 'pointer', boxShadow: '0 4px 14px rgba(194,104,63,.32)' }}>Send forespørsel</button>
+          <button onClick={() => requireAuth(() => go('booking', selListing().id))} style={{ background: CLAY, color: '#fff', border: 'none', borderRadius: 999, padding: '15px 26px', fontSize: 15, fontWeight: 600, cursor: 'pointer', boxShadow: '0 4px 14px rgba(194,104,63,.32)' }}>Send forespørsel</button>
         </div>
       )}
     </div>

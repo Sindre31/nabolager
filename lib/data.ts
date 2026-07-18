@@ -2,16 +2,39 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import type { AppData, Listing, Profile, RequestRow } from '@/lib/types';
 
 /**
- * Loads everything the phone app needs for the signed-in user.
- * Returns null when there is no authenticated session (→ show the auth screen).
+ * Loads everything the phone app needs. With no authenticated session, the
+ * app is still browsable — `listings` is world-readable by RLS — so we
+ * return a read-only guest view of the same shape (empty favourites/requests,
+ * a placeholder profile) instead of blocking the whole site behind login.
  */
-export async function loadAppData(): Promise<AppData | null> {
+export async function loadAppData(): Promise<AppData> {
   const supabase = await createSupabaseServerClient();
 
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return null;
+
+  if (!user) {
+    const { data, error } = await supabase.from('listings').select('*').order('num', { ascending: true });
+    if (error) throw error;
+    return {
+      listings: (data ?? []) as Listing[],
+      profile: {
+        id: '',
+        name: 'Gjest',
+        initials: 'G',
+        city: 'Oslo',
+        member_since: String(new Date().getFullYear()),
+        rating: 5.0,
+        tenancies: 0,
+        as_host: 0,
+      },
+      favoriteIds: [],
+      requests: [],
+      userEmail: null,
+      isGuest: true,
+    };
+  }
 
   const [listingsRes, profileRes, favRes, reqRes] = await Promise.all([
     supabase.from('listings').select('*').order('num', { ascending: true }),
@@ -44,5 +67,5 @@ export async function loadAppData(): Promise<AppData | null> {
   const favoriteIds = (favRes.data ?? []).map((f) => f.listing_id as string);
   const requests = (reqRes.data ?? []) as RequestRow[];
 
-  return { listings, profile, favoriteIds, requests, userEmail: user.email ?? null };
+  return { listings, profile, favoriteIds, requests, userEmail: user.email ?? null, isGuest: false };
 }

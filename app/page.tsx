@@ -1,6 +1,5 @@
 import IOSDevice from '@/components/IOSDevice';
 import PhoneApp from '@/components/PhoneApp';
-import AuthScreen from '@/components/AuthScreen';
 import SetupNotice from '@/components/SetupNotice';
 import { hasSupabaseEnv } from '@/lib/supabase/server';
 import { loadAppData } from '@/lib/data';
@@ -32,15 +31,10 @@ export default async function Page() {
   }
 
   try {
+    // No session → loadAppData returns a read-only guest view (public listings,
+    // empty favourites/requests); PhoneApp prompts for login only when a
+    // guest taps an action that needs an account.
     const data = await loadAppData();
-    // Not signed in → the app is gated behind login/registration.
-    if (!data) {
-      return (
-        <Stage>
-          <AuthScreen />
-        </Stage>
-      );
-    }
     return (
       <Stage>
         <PhoneApp data={data} />

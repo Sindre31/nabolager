@@ -66,4 +66,6 @@ export interface AppData {
   favoriteIds: string[];
   requests: RequestRow[];
   userEmail: string | null;
+  /** No authenticated session — browsing the public demo inventory read-only. */
+  isGuest: boolean;
 }
