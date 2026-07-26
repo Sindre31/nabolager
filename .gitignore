@@ -30,7 +30,7 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (commit .env.example, ignore real secrets)
+# env files (the demo needs none, but never commit secrets)
 .env
 .env*.local
 

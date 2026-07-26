@@ -1,4 +1,5 @@
-// Domain types — shared between server fetch, actions and client screens.
+// Domain types — shared between the demo dataset, the in-memory store and
+// the screens.
 
 export type ListingType = 'Bod' | 'Garasje' | 'Loft' | 'Container' | 'Industri';
 
@@ -59,13 +60,13 @@ export interface Profile {
   as_host: number;
 }
 
-/** Everything the phone app needs for an initial render. */
+/** Everything the phone app renders from. */
 export interface AppData {
   listings: Listing[];
   profile: Profile;
   favoriteIds: string[];
   requests: RequestRow[];
   userEmail: string | null;
-  /** No authenticated session — browsing the public demo inventory read-only. */
+  /** Signed out — browsing the public demo inventory read-only. */
   isGuest: boolean;
 }
