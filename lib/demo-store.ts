@@ -1,13 +1,12 @@
 'use client';
 
-// In-memory replacement for the database + server actions.
+// Client-side replacement for the database + server actions.
 //
 // Every mutation the app used to persist (favourites, requests, publishing,
-// sign in/out) happens here in React state instead. Changes are real for the
-// length of the visit and reset on reload — which is exactly what a demo
-// wants: no backend, no credentials, nothing to set up.
+// sign in/out) happens here in React state, and is mirrored to localStorage so
+// it survives a reload. No backend, no credentials, nothing to set up.
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   DEMO_EMAIL,
   DEMO_FAVORITE_IDS,
@@ -45,7 +44,7 @@ export interface DemoStore extends AppData {
   publishListing: (input: PublishInput) => void;
   signIn: (name: string, email: string) => void;
   signOut: () => void;
-  /** Back to the seeded state, without a page reload. */
+  /** Back to the seeded state, in memory and in storage. */
   reset: () => void;
 }
 
@@ -57,6 +56,49 @@ interface Session {
 
 const INITIAL_SESSION: Session = { signedIn: true, name: DEMO_PROFILE.name, email: DEMO_EMAIL };
 
+// ── Persistence ─────────────────────────────────────────────────────────────
+// The version suffix is the migration story: change the shape, bump the key,
+// and older saves are simply ignored instead of crashing a screen.
+const STORAGE_KEY = 'nabolager.demo.v1';
+
+interface Stored {
+  listings: Listing[];
+  favoriteIds: string[];
+  requests: RequestRow[];
+  session: Session;
+}
+
+/**
+ * Reads the saved demo state. Anything unreadable or the wrong shape is
+ * discarded rather than half-applied — a demo should never boot into a broken
+ * screen because of a stale save.
+ */
+function readStored(): Stored | null {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+    const { listings, favoriteIds, requests, session } = parsed as Partial<Stored>;
+    if (!Array.isArray(listings) || !listings.length) return null;
+    if (!Array.isArray(favoriteIds) || !Array.isArray(requests)) return null;
+    if (!session || typeof session.signedIn !== 'boolean') return null;
+    if (typeof session.name !== 'string' || typeof session.email !== 'string') return null;
+    return { listings, favoriteIds, requests, session };
+  } catch {
+    // Malformed JSON, or storage blocked (private mode, cookies off).
+    return null;
+  }
+}
+
+function writeStored(state: Stored) {
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    // Quota or blocked storage — the demo still works, it just won't persist.
+  }
+}
+
 /** № of the next published listing — one past the highest in the set. */
 function nextNum(listings: Listing[]): string {
   const max = listings.reduce((m, l) => Math.max(m, parseInt(l.num, 10) || 0), 0);
@@ -64,10 +106,31 @@ function nextNum(listings: Listing[]): string {
 }
 
 export function useDemoStore(): DemoStore {
+  // Start from the seed so the first client render matches the prerendered
+  // HTML; the stored copy is applied right after hydration.
   const [listings, setListings] = useState<Listing[]>(DEMO_LISTINGS);
   const [favoriteIds, setFavoriteIds] = useState<string[]>(DEMO_FAVORITE_IDS);
   const [requests, setRequests] = useState<RequestRow[]>(DEMO_REQUESTS);
   const [session, setSession] = useState<Session>(INITIAL_SESSION);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    const stored = readStored();
+    if (stored) {
+      setListings(stored.listings);
+      setFavoriteIds(stored.favoriteIds);
+      setRequests(stored.requests);
+      setSession(stored.session);
+    }
+    setLoaded(true);
+  }, []);
+
+  // Save on every change — but not before the stored copy has been read, or
+  // the seed would overwrite it on mount.
+  useEffect(() => {
+    if (!loaded) return;
+    writeStored({ listings, favoriteIds, requests, session });
+  }, [loaded, listings, favoriteIds, requests, session]);
 
   const profile = useMemo(
     () =>
@@ -172,6 +235,7 @@ export function useDemoStore(): DemoStore {
     setFavoriteIds(DEMO_FAVORITE_IDS);
     setRequests(DEMO_REQUESTS);
     setSession(INITIAL_SESSION);
+    // The save effect writes the seed back over the stored copy.
   }, []);
 
   return {
