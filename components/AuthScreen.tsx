@@ -13,8 +13,8 @@ const BODY = '#4A4239';
 
 /**
  * Demo sign-in. There is no backend and no magic link — whatever name and
- * e-post you type signs you straight into the demo account, and the fields
- * are pre-filled so you can just tap the button.
+ * e-mail you type signs you straight into the demo account (stored in
+ * localStorage), and the fields are pre-filled so you can just tap the button.
  */
 export default function AuthScreen({
   onBack,
@@ -81,8 +81,8 @@ export default function AuthScreen({
         Velkommen til <span style={{ fontStyle: 'italic', color: CLAY }}>nabolaget.</span>
       </h1>
       <p style={{ margin: '0 0 28px', fontSize: 14, lineHeight: 1.6, color: BODY }}>
-        Dette er en demo — ingen e-post sendes og ingenting lagres. Trykk på knappen, så er du inne
-        i demokontoen med annonser, favoritter og forespørsler.
+        Dette er en demo — ingen e-post sendes, og alt lagres kun i din egen nettleser. Trykk på
+        knappen, så er du inne i demokontoen med annonser, favoritter og forespørsler.
       </p>
 
       <div style={labelStyle}>Navn</div>

@@ -47,7 +47,8 @@ so no screen is empty. Everything below is interactive:
 | Log in | Instant — no e-mail is sent, the fields are pre-filled |
 | Nullstill demodata (Profil) | Restores the seeded state |
 
-Changes last for the visit and reset on reload, since nothing is persisted.
+Every change is saved to `localStorage` under `nabolager.demo.v1`, so it survives a
+reload. Nothing leaves the browser. **Nullstill demodata** in Profil puts the seed back.
 
 ## Project layout
 
@@ -61,7 +62,7 @@ components/
   AuthScreen.tsx    demo sign-in (no e-mail, no provider)
 lib/
   demo-data.ts      the seeded listings, profile, requests and favourites
-  demo-store.ts     in-memory store — the mutations the app used to persist
+  demo-store.ts     client store — the mutations, persisted to localStorage
   types.ts  constants.ts  format.ts
 supabase/
   migrations/  seed.sql   reference SQL, unused by the demo (see below)
@@ -75,7 +76,11 @@ supabase/
   `lib/demo-store.ts`. The SQL under `supabase/` is kept as a schema reference
   for whoever wires a real backend back up — nothing in the app reads it.
 - **Deterministic seed data.** No `Date.now()` or randomness in the dataset, so
-  the server-rendered HTML and the client hydration match.
+  the server-rendered HTML and the client hydration match. The stored copy is
+  applied in an effect right after hydration, for the same reason.
+- **Storage is defensive.** A save that is missing, malformed or the wrong shape
+  is discarded and the seed is used, so a stale entry can't boot a broken screen.
+  Change the state shape and the key version (`nabolager.demo.v1`) goes with it.
 - **Date pickers** in booking are visual (fixed 15. mai – 15. aug), as in the prototype.
 - **Photos** are the design's striped placeholders, ready for real images.
 - The host income calculator and price ranges use the design's per-type rates
