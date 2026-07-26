@@ -1,19 +1,12 @@
 'use client';
 
-import { useState, useTransition } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
 import { SERIF, SANS, MONO } from '@/components/fonts';
 import { fmt } from '@/lib/format';
 import { LISTING_TYPES, HOST_RATES } from '@/lib/constants';
-import type { AppData, Listing, RequestRow } from '@/lib/types';
+import { useDemoStore } from '@/lib/demo-store';
+import type { Listing, RequestRow } from '@/lib/types';
 import AuthScreen from '@/components/AuthScreen';
-import {
-  toggleFavorite,
-  createRequest,
-  setRequestStatus,
-  publishListing,
-  signOut,
-} from '@/app/actions';
 
 type Screen = 'home' | 'explore' | 'detail' | 'booking' | 'host' | 'dash' | 'profile' | 'auth';
 const TAB_SCREENS: Screen[] = ['home', 'explore', 'host', 'dash', 'profile'];
@@ -32,13 +25,13 @@ interface EnrichedListing extends Listing {
   ratingFmt: string;
 }
 
-export default function PhoneApp({ data }: { data: AppData }) {
-  const router = useRouter();
-  const [, startTransition] = useTransition();
+export default function PhoneApp() {
+  // Demo state lives in memory — see lib/demo-store.ts. Mutations apply
+  // immediately and last until the page is reloaded.
+  const store = useDemoStore();
+  const { listings, profile, requests, favoriteIds, userEmail, isGuest } = store;
 
-  const { listings, profile, requests, userEmail, isGuest } = data;
-
-  // Real, per-user slices of the live data.
+  // Per-user slices of the demo data.
   const myListings = listings.filter((l) => l.owner_id === profile.id);
   const myListingIds = new Set(myListings.map((l) => l.id));
   const hostRequests = requests.filter((r) => myListingIds.has(r.listing_id));
@@ -67,14 +60,15 @@ export default function PhoneApp({ data }: { data: AppData }) {
 
   const [dashTab, setDashTab] = useState<'listings' | 'requests'>('listings');
 
-  // optimistic overlays on top of server data
-  const [favOverride, setFavOverride] = useState<Record<string, boolean>>(
-    Object.fromEntries(data.favoriteIds.map((id) => [id, true])),
-  );
-  const [reqOverride, setReqOverride] = useState<Record<string, string>>({});
+  // All screens share one scroll container, so a new screen would otherwise
+  // inherit the previous one's offset.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: 0 });
+  }, [screen, bStep]);
 
   // ── helpers ────────────────────────────────────────────────────────────────
-  const isFav = (id: string) => favOverride[id] ?? data.favoriteIds.includes(id);
+  const isFav = (id: string) => favoriteIds.includes(id);
 
   function enrich(l: Listing): EnrichedListing {
     return {
@@ -97,8 +91,7 @@ export default function PhoneApp({ data }: { data: AppData }) {
   }
 
   // Browsing works with no account; actions that write data (favourite, book,
-  // publish) route a guest to the login screen instead of hitting the server
-  // action, which would just throw ("Not authenticated").
+  // publish) route a guest to the login screen first.
   function requireAuth(action: () => void) {
     if (isGuest) { go('auth'); return; }
     action();
@@ -120,24 +113,18 @@ export default function PhoneApp({ data }: { data: AppData }) {
     setHist([]);
   }
 
-  function refresh() {
-    startTransition(() => router.refresh());
+  function handleToggleFav(id: string) {
+    requireAuth(() => store.toggleFavorite(id));
   }
 
-  function handleToggleFav(id: string) {
-    requireAuth(() => {
-      const next = !isFav(id);
-      setFavOverride((m) => ({ ...m, [id]: next }));
-      startTransition(async () => {
-        await toggleFavorite(id, next);
-      });
-    });
+  function handleSignIn(name: string, email: string) {
+    store.signIn(name, email);
+    back();
   }
 
   function handleSignOut() {
-    startTransition(async () => {
-      await signOut();
-    });
+    store.signOut();
+    tabGo('home');
   }
 
   // Popular areas, derived live from the actual listing set.
@@ -154,24 +141,15 @@ export default function PhoneApp({ data }: { data: AppData }) {
 
   function sendRequest() {
     const l = selListing();
-    const fallback = 'NL-2026-0' + (4800 + (parseInt(l.num, 10) || 0));
-    setBReqId(fallback);
-    setBStep(3);
-    startTransition(async () => {
-      try {
-        const { reqId } = await createRequest({
-          listingId: l.id,
-          listingNum: l.num,
-          fromName: bName,
-          fromPhone: bPhone,
-          message: bMsg || 'Hei! Jeg er interessert i plassen.',
-        });
-        setBReqId(reqId);
-        router.refresh();
-      } catch {
-        /* keep fallback id on failure */
-      }
+    const reqId = store.createRequest({
+      listingId: l.id,
+      listingNum: l.num,
+      fromName: bName,
+      fromPhone: bPhone,
+      message: bMsg || 'Hei! Jeg er interessert i plassen.',
     });
+    setBReqId(reqId);
+    setBStep(3);
   }
 
   function bookingPrimary() {
@@ -666,15 +644,8 @@ export default function PhoneApp({ data }: { data: AppData }) {
     const est = Math.round((hSize * rate) / 10) * 10;
     const estRange = `${fmt(Math.round((est * 0.85) / 10) * 10)}–${fmt(Math.round((est * 1.15) / 10) * 10)}`;
     function publish() {
+      store.publishListing({ type: hType, sizeM2: hSize, area: hArea, price: est });
       setHPublished(true);
-      startTransition(async () => {
-        try {
-          await publishListing({ type: hType, sizeM2: hSize, area: hArea, price: est });
-          router.refresh();
-        } catch {
-          /* still show success in the prototype */
-        }
-      });
     }
     if (hPublished) {
       return (
@@ -758,8 +729,7 @@ export default function PhoneApp({ data }: { data: AppData }) {
   function Dashboard() {
     const mine = myListings;
     const reqCountFor = (id: string) => hostRequests.filter((r) => r.listing_id === id).length;
-    const reqStatus = (r: RequestRow) => reqOverride[r.id] ?? r.status;
-    const pendingCount = hostRequests.filter((r) => reqStatus(r) === 'pending').length;
+    const pendingCount = hostRequests.filter((r) => r.status === 'pending').length;
     const kpiViews = mine.reduce((s, l) => s + l.views, 0);
     const kpiIncome = mine.filter((l) => l.status === 'rented').reduce((s, l) => s + l.price, 0);
 
@@ -767,10 +737,7 @@ export default function PhoneApp({ data }: { data: AppData }) {
     const initialsOf = (name: string) => name.split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('');
 
     function act(r: RequestRow, status: 'accepted' | 'declined') {
-      setReqOverride((m) => ({ ...m, [r.id]: status }));
-      startTransition(async () => {
-        await setRequestStatus(r.id, status);
-      });
+      store.setRequestStatus(r.id, status);
     }
 
     const isList = dashTab === 'listings';
@@ -840,7 +807,7 @@ export default function PhoneApp({ data }: { data: AppData }) {
               <EmptyState title="Ingen forespørsler" sub="Når naboer sender forespørsel på plassene dine, dukker de opp her." />
             )}
             {hostRequests.map((r) => {
-              const status = reqStatus(r);
+              const status = r.status;
               return (
                 <div key={r.id} style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 18, padding: 16 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -885,7 +852,7 @@ export default function PhoneApp({ data }: { data: AppData }) {
     };
     const bookings = myRequests.map((r) => {
       const l = listings.find((x) => x.id === r.listing_id);
-      const s = statusMap[reqOverride[r.id] ?? r.status] ?? statusMap.pending;
+      const s = statusMap[r.status] ?? statusMap.pending;
       return {
         key: r.id,
         num: l?.num ?? '—',
@@ -897,7 +864,7 @@ export default function PhoneApp({ data }: { data: AppData }) {
         id: r.listing_id,
       };
     });
-    const tenancyCount = myRequests.filter((r) => (reqOverride[r.id] ?? r.status) === 'accepted').length;
+    const tenancyCount = myRequests.filter((r) => r.status === 'accepted').length;
     const settings = [
       { label: 'Konto og verifisering', ic: '#F5E6DC' },
       { label: 'Varsler', ic: '#E4EFE7' },
@@ -978,7 +945,8 @@ export default function PhoneApp({ data }: { data: AppData }) {
           ) : (
             <button onClick={handleSignOut} style={{ width: '100%', background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 14, padding: 15, fontSize: 15, fontWeight: 600, color: '#B23A2E', cursor: 'pointer' }}>Logg ut</button>
           )}
-          <div style={{ textAlign: 'center', fontFamily: MONO, fontSize: 10, color: '#B8AE9C', marginTop: 18 }}>NABOLAGER v1.0 · ET NORSK PILOTPROSJEKT</div>
+          <button onClick={() => { store.reset(); tabGo('home'); }} style={{ width: '100%', marginTop: 10, background: 'none', border: 'none', color: '#8C8275', fontSize: 13, fontWeight: 500, cursor: 'pointer', padding: 10 }}>Nullstill demodata</button>
+          <div style={{ textAlign: 'center', fontFamily: MONO, fontSize: 10, color: '#B8AE9C', marginTop: 12 }}>NABOLAGER v1.0 · DEMO UTEN DATABASE</div>
         </div>
         <div style={{ height: 120 }} />
       </div>
@@ -1021,7 +989,7 @@ export default function PhoneApp({ data }: { data: AppData }) {
   // ── compose ──────────────────────────────────────────────────────────────────
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: SAND, fontFamily: SANS, color: INK }}>
-      <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
+      <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
         {screen === 'home' && <Home />}
         {screen === 'explore' && <Explore />}
         {screen === 'detail' && <Detail />}
@@ -1029,7 +997,7 @@ export default function PhoneApp({ data }: { data: AppData }) {
         {screen === 'host' && <Host />}
         {screen === 'dash' && <Dashboard />}
         {screen === 'profile' && <Profile />}
-        {screen === 'auth' && <AuthScreen onBack={back} />}
+        {screen === 'auth' && <AuthScreen onBack={back} onSignIn={handleSignIn} />}
       </div>
 
       {showTabBar && <TabBar />}
