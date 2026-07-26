@@ -64,17 +64,16 @@ lib/
   demo-data.ts      the seeded listings, profile, requests and favourites
   demo-store.ts     client store — the mutations, persisted to localStorage
   types.ts  constants.ts  format.ts
-supabase/
-  migrations/  seed.sql   reference SQL, unused by the demo (see below)
 ```
 
 ## Notes / decisions
 
 - **No Supabase.** An earlier build read and wrote live Postgres via Supabase.
-  The demo drops the client, the server actions, the auth callback route and the
-  session middleware; screens read from `lib/demo-data.ts` and mutate through
-  `lib/demo-store.ts`. The SQL under `supabase/` is kept as a schema reference
-  for whoever wires a real backend back up — nothing in the app reads it.
+  The demo drops the client, the server actions, the auth callback route, the
+  session middleware and the SQL migrations; screens read from `lib/demo-data.ts`
+  and mutate through `lib/demo-store.ts`. `lib/types.ts` still describes the
+  domain shape if a real backend is ever wired back up, and the deleted schema is
+  in the history (`git log -- supabase/`).
 - **Deterministic seed data.** No `Date.now()` or randomness in the dataset, so
   the server-rendered HTML and the client hydration match. The stored copy is
   applied in an effect right after hydration, for the same reason.
